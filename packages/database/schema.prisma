@@ -1,0 +1,1100 @@
+// =============================================================================
+// TRAVELLOOP – COMPLETE PRISMA DATABASE SCHEMA v2.0
+// =============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "postgresqlExtensions"]
+}
+
+datasource db {
+  provider          = "postgresql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("DATABASE_SHADOW_URL")
+  extensions        = [pgcrypto, pg_trgm, uuid_ossp]
+}
+
+// ─── ENUMS ───────────────────────────────────────────────────────────────────
+
+enum UserRole { USER PREMIUM CREATOR MODERATOR ADMIN SUPER_ADMIN }
+enum UserStatus { ACTIVE INACTIVE SUSPENDED DELETED PENDING_VERIFICATION }
+enum TripStatus { DRAFT PLANNING CONFIRMED ACTIVE COMPLETED CANCELLED ARCHIVED }
+enum TripVisibility { PRIVATE FRIENDS PUBLIC UNLISTED }
+enum TripType { SOLO COUPLE FAMILY GROUP BUSINESS ADVENTURE LUXURY BUDGET BACKPACKER }
+enum ActivityCategory { SIGHTSEEING ADVENTURE FOOD_DINING CULTURE_ARTS NATURE SHOPPING NIGHTLIFE WELLNESS_SPA SPORTS WATER_SPORTS PHOTOGRAPHY LOCAL_EXPERIENCE TRANSPORTATION ACCOMMODATION OTHER }
+enum ExpenseCategory { ACCOMMODATION FOOD_DINING TRANSPORTATION ACTIVITIES SHOPPING HEALTH_MEDICAL COMMUNICATION ENTERTAINMENT VISA_FEES INSURANCE TIPS_GRATUITY MISCELLANEOUS }
+enum NoteCategory { THOUGHT MEMORY TIP TODO BUDGET GENERAL }
+enum NotePrivacy { PRIVATE SHARED PUBLIC }
+enum TransportMode { FLIGHT TRAIN BUS CAR FERRY TAXI METRO WALK BIKE OTHER }
+enum BuddyStatus { PENDING ACCEPTED DECLINED BLOCKED }
+enum AlertSeverity { LOW MEDIUM HIGH CRITICAL }
+enum ModerationStatus { PENDING APPROVED REJECTED FLAGGED }
+enum OAuthProvider { GOOGLE FACEBOOK APPLE GITHUB }
+enum NotificationType { TRIP_INVITE BUDDY_REQUEST EXPENSE_ALERT WEATHER_ALERT SAFETY_ALERT PRICE_DROP TRIP_REMINDER ACHIEVEMENT SYSTEM MESSAGE }
+enum MoodType { AMAZING GREAT GOOD OKAY TIRED STRESSED }
+
+// ─── USERS ───────────────────────────────────────────────────────────────────
+
+model User {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clerkId        String?    @unique
+  email          String     @unique
+  emailVerified  Boolean    @default(false)
+  phone          String?    @unique
+  phoneVerified  Boolean    @default(false)
+  passwordHash   String?
+  role           UserRole   @default(USER)
+  status         UserStatus @default(PENDING_VERIFICATION)
+  referralCode   String     @unique @default(dbgenerated("upper(substring(gen_random_uuid()::text,1,8))"))
+  referredById   String?    @db.Uuid
+  loginStreak    Int        @default(0)
+  lastLoginAt    DateTime?
+  lastActiveAt   DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  deletedAt      DateTime?
+
+  profile           UserProfile?
+  settings          UserSettings?
+  preferences       UserPreferences?
+  oauthAccounts     OAuthAccount[]
+  sessions          Session[]
+  otpCodes          OtpCode[]
+  devices           UserDevice[]
+  trips             Trip[]
+  tripCompanions    TripCompanion[]
+  expenses          Expense[]
+  notes             Note[]
+  reviews           Review[]
+  publicItineraries PublicItinerary[]
+  buddiesInitiated  TravelBuddy[]     @relation("BuddyInitiator")
+  buddiesReceived   TravelBuddy[]     @relation("BuddyReceiver")
+  messagesSent      Message[]         @relation("MessageSender")
+  messagesReceived  Message[]         @relation("MessageReceiver")
+  notifications     Notification[]
+  achievements      UserAchievement[]
+  mindfulPoints     MindfulPoint[]
+  carbonOffsets     CarbonOffset[]
+  referredBy        User?             @relation("Referrals", fields: [referredById], references: [id])
+  referrals         User[]            @relation("Referrals")
+  auditLogs         AuditLog[]
+  analyticsEvents   AnalyticsEvent[]
+  moderationActions ModerationAction[]
+  savedCities       SavedCity[]
+  savedActivities   SavedActivity[]
+  packingLists      PackingList[]
+  tripTemplates     TripTemplate[]    @relation("TemplateCreator")
+  communityPosts    CommunityPost[]
+  postComments      PostComment[]
+  postLikes         PostLike[]
+  followers         UserFollow[]      @relation("Following")
+  following         UserFollow[]      @relation("Follower")
+
+  @@index([email])
+  @@index([clerkId])
+  @@index([status])
+  @@map("users")
+}
+
+model UserProfile {
+  id               String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String    @unique @db.Uuid
+  firstName        String
+  lastName         String
+  displayName      String?
+  bio              String?   @db.Text
+  avatarUrl        String?
+  coverPhotoUrl    String?
+  dateOfBirth      DateTime?
+  gender           String?
+  nationality      String?
+  homeCity         String?
+  homeCountry      String?
+  website          String?
+  instagram        String?
+  twitter          String?
+  travelStyleBadge String?
+  totalTrips       Int       @default(0)
+  totalCountries   Int       @default(0)
+  totalCities      Int       @default(0)
+  totalDistance    Float     @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("user_profiles")
+}
+
+model UserSettings {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId              String   @unique @db.Uuid
+  theme               String   @default("system")
+  language            String   @default("en")
+  currency            String   @default("USD")
+  timezone            String   @default("UTC")
+  dateFormat          String   @default("MM/DD/YYYY")
+  distanceUnit        String   @default("km")
+  emailNotifications  Boolean  @default(true)
+  pushNotifications   Boolean  @default(true)
+  smsNotifications    Boolean  @default(false)
+  marketingEmails     Boolean  @default(false)
+  profileVisibility   String   @default("public")
+  showOnLeaderboard   Boolean  @default(true)
+  allowBuddyRequests  Boolean  @default(true)
+  twoFactorEnabled    Boolean  @default(false)
+  twoFactorSecret     String?
+  betaFeaturesEnabled Boolean  @default(false)
+  accessibilityMode   Boolean  @default(false)
+  reducedMotion       Boolean  @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("user_settings")
+}
+
+model UserPreferences {
+  id                  String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId              String   @unique @db.Uuid
+  budgetRange         String   @default("medium")
+  travelPace          String   @default("moderate")
+  accommodationType   String[] @default([])
+  dietaryRestrictions String[] @default([])
+  interests           String[] @default([])
+  preferredClimate    String[] @default([])
+  avoidedActivities   String[] @default([])
+  travelStyle         String[] @default([])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("user_preferences")
+}
+
+model OAuthAccount {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String        @db.Uuid
+  provider     OAuthProvider
+  providerId   String
+  accessToken  String?       @db.Text
+  refreshToken String?       @db.Text
+  expiresAt    DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([provider, providerId])
+  @@index([userId])
+  @@map("oauth_accounts")
+}
+
+model Session {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String   @db.Uuid
+  token        String   @unique
+  refreshToken String?  @unique
+  deviceId     String?
+  ipAddress    String?
+  userAgent    String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("sessions")
+}
+
+model OtpCode {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @db.Uuid
+  code      String
+  type      String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("otp_codes")
+}
+
+model UserDevice {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @db.Uuid
+  deviceName String
+  deviceType String
+  platform   String
+  pushToken  String?
+  isActive   Boolean  @default(true)
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("user_devices")
+}
+
+model UserFollow {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  followerId  String   @db.Uuid
+  followingId String   @db.Uuid
+  createdAt   DateTime @default(now())
+  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
+  @@unique([followerId, followingId])
+  @@map("user_follows")
+}
+
+// ─── TRIPS ───────────────────────────────────────────────────────────────────
+
+model Trip {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String         @db.Uuid
+  name            String
+  description     String?        @db.Text
+  coverPhotoUrl   String?
+  type            TripType       @default(SOLO)
+  status          TripStatus     @default(DRAFT)
+  visibility      TripVisibility @default(PRIVATE)
+  startDate       DateTime
+  endDate         DateTime
+  totalBudget     Float?
+  currency        String         @default("USD")
+  timezone        String         @default("UTC")
+  slug            String?        @unique
+  tags            String[]       @default([])
+  isTemplate      Boolean        @default(false)
+  templateId      String?        @db.Uuid
+  viewCount       Int            @default(0)
+  copyCount       Int            @default(0)
+  shareCount      Int            @default(0)
+  carbonFootprint Float?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  template        TripTemplate?   @relation(fields: [templateId], references: [id])
+  companions      TripCompanion[]
+  itinerary       Itinerary?
+  expenses        Expense[]
+  notes           Note[]
+  publicItinerary PublicItinerary?
+  carbonTracking  CarbonTracking[]
+  shares          TripShare[]
+  liveTracking    LiveTracking?
+  detourHistory   DetourHistory[]
+  roadmapMeta     RoadmapMeta?
+  packingLists    PackingList[]
+  budgetCategories BudgetCategory[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([startDate, endDate])
+  @@index([slug])
+  @@index([visibility])
+  @@map("trips")
+}
+
+model TripCompanion {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId      String    @db.Uuid
+  userId      String    @db.Uuid
+  role        String    @default("viewer")
+  inviteEmail String?
+  inviteToken String?   @unique
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  trip        Trip      @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([tripId, userId])
+  @@map("trip_companions")
+}
+
+model TripTemplate {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  creatorId   String   @db.Uuid
+  name        String
+  description String?  @db.Text
+  coverUrl    String?
+  theme       String?
+  duration    Int
+  budgetLevel String
+  season      String?
+  rating      Float    @default(0)
+  useCount    Int      @default(0)
+  isOfficial  Boolean  @default(false)
+  tags        String[] @default([])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  creator     User     @relation("TemplateCreator", fields: [creatorId], references: [id])
+  trips       Trip[]
+  @@index([theme])
+  @@index([rating])
+  @@map("trip_templates")
+}
+
+model TripShare {
+  id       String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId   String   @db.Uuid
+  platform String
+  sharedAt DateTime @default(now())
+  trip     Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  @@index([tripId])
+  @@map("trip_shares")
+}
+
+// ─── ITINERARY ────────────────────────────────────────────────────────────────
+
+model Itinerary {
+  id            String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId        String             @unique @db.Uuid
+  version       Int                @default(1)
+  isOptimized   Boolean            @default(false)
+  totalDistance Float?
+  totalDuration Int?
+  collaborators String[]           @default([]) @db.Uuid
+  lastEditedBy  String?            @db.Uuid
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  trip          Trip               @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  stops         ItineraryStop[]
+  versions      ItineraryVersion[]
+  @@map("itineraries")
+}
+
+model ItineraryStop {
+  id                String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  itineraryId       String              @db.Uuid
+  cityId            String?             @db.Uuid
+  name              String
+  description       String?             @db.Text
+  latitude          Float?
+  longitude         Float?
+  address           String?
+  arrivalDate       DateTime
+  departureDate     DateTime
+  dayNumber         Int
+  orderIndex        Int
+  transportMode     TransportMode?
+  transportCost     Float?
+  transportNotes    String?
+  accommodation     String?
+  accommodationCost Float?
+  notes             String?             @db.Text
+  isHiddenGem       Boolean             @default(false)
+  weatherData       Json?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  itinerary         Itinerary           @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  city              City?               @relation(fields: [cityId], references: [id])
+  activities        ItineraryActivity[]
+  @@index([itineraryId])
+  @@index([dayNumber, orderIndex])
+  @@map("itinerary_stops")
+}
+
+model ItineraryActivity {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  stopId       String        @db.Uuid
+  activityId   String?       @db.Uuid
+  name         String
+  description  String?       @db.Text
+  startTime    DateTime
+  endTime      DateTime
+  cost         Float?
+  currency     String        @default("USD")
+  bookingRef   String?
+  notes        String?       @db.Text
+  orderIndex   Int
+  isBooked     Boolean       @default(false)
+  isCompleted  Boolean       @default(false)
+  weatherAlert Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  stop         ItineraryStop @relation(fields: [stopId], references: [id], onDelete: Cascade)
+  activity     Activity?     @relation(fields: [activityId], references: [id])
+  @@index([stopId])
+  @@map("itinerary_activities")
+}
+
+model ItineraryVersion {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  itineraryId String    @db.Uuid
+  version     Int
+  snapshot    Json
+  editedBy    String    @db.Uuid
+  changeNote  String?
+  createdAt   DateTime  @default(now())
+  itinerary   Itinerary @relation(fields: [itineraryId], references: [id], onDelete: Cascade)
+  @@index([itineraryId])
+  @@map("itinerary_versions")
+}
+
+// ─── CITIES ───────────────────────────────────────────────────────────────────
+
+model City {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name           String
+  country        String
+  countryCode    String          @db.Char(2)
+  region         String?
+  latitude       Float
+  longitude      Float
+  timezone       String
+  population     Int?
+  currency       String?
+  language       String[]        @default([])
+  description    String?         @db.Text
+  imageUrl       String?
+  thumbnailUrl   String?
+  rating         Float           @default(0)
+  reviewCount    Int             @default(0)
+  isPopular      Boolean         @default(false)
+  isFeatured     Boolean         @default(false)
+  tags           String[]        @default([])
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  costs          CityCost[]
+  weather        CityWeather[]
+  reviews        CityReview[]
+  safetyInfo     CitySafetyInfo?
+  visaInfo       CityVisaInfo[]
+  activities     Activity[]
+  itineraryStops ItineraryStop[]
+  savedBy        SavedCity[]
+  @@unique([name, countryCode])
+  @@index([countryCode])
+  @@index([rating])
+  @@map("cities")
+}
+
+model CityCost {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cityId      String   @db.Uuid
+  category    String
+  budgetMin   Float
+  budgetMax   Float
+  midRangeMin Float
+  midRangeMax Float
+  luxuryMin   Float
+  luxuryMax   Float
+  currency    String   @default("USD")
+  updatedAt   DateTime @updatedAt
+  city        City     @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  @@unique([cityId, category])
+  @@map("city_costs")
+}
+
+model CityWeather {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cityId           String   @db.Uuid
+  month            Int
+  avgTempMin       Float
+  avgTempMax       Float
+  avgRainfall      Float
+  avgHumidity      Float
+  avgSunshineHours Float
+  weatherType      String
+  travelRating     Int
+  notes            String?
+  city             City     @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  @@unique([cityId, month])
+  @@map("city_weather")
+}
+
+model CityReview {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cityId       String   @db.Uuid
+  userId       String   @db.Uuid
+  rating       Int
+  title        String?
+  content      String   @db.Text
+  photos       String[] @default([])
+  visitedAt    DateTime?
+  helpfulCount Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  city         City     @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  @@index([cityId])
+  @@map("city_reviews")
+}
+
+model CitySafetyInfo {
+  id                 String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cityId             String        @unique @db.Uuid
+  overallSafetyScore Int
+  crimeLevel         String
+  theftRisk          String
+  scamRisk           String
+  soloFemaleRating   Int
+  lgbtqFriendly      Boolean       @default(false)
+  emergencyNumber    String?
+  policeNumber       String?
+  ambulanceNumber    String?
+  nearestHospital    String?
+  travelAdvisory     String?
+  advisoryLevel      AlertSeverity @default(LOW)
+  lastUpdated        DateTime      @updatedAt
+  city               City          @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  @@map("city_safety_info")
+}
+
+model CityVisaInfo {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cityId          String   @db.Uuid
+  passportCountry String   @db.Char(2)
+  visaRequired    Boolean
+  visaType        String?
+  maxStayDays     Int?
+  cost            Float?
+  processingDays  Int?
+  notes           String?  @db.Text
+  updatedAt       DateTime @updatedAt
+  city            City     @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  @@unique([cityId, passportCountry])
+  @@map("city_visa_info")
+}
+
+model SavedCity {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid
+  cityId    String   @db.Uuid
+  notes     String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  city      City     @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  @@unique([userId, cityId])
+  @@map("saved_cities")
+}
+
+// ─── ACTIVITIES ───────────────────────────────────────────────────────────────
+
+model Activity {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cityId              String              @db.Uuid
+  name                String
+  description         String?             @db.Text
+  category            ActivityCategory
+  latitude            Float?
+  longitude           Float?
+  address             String?
+  imageUrl            String?
+  images              String[]            @default([])
+  priceMin            Float?
+  priceMax            Float?
+  currency            String              @default("USD")
+  duration            Int?
+  rating              Float               @default(0)
+  reviewCount         Int                 @default(0)
+  bookingUrl          String?
+  openingHours        Json?
+  isHiddenGem         Boolean             @default(false)
+  isFeatured          Boolean             @default(false)
+  weatherDependent    Boolean             @default(false)
+  accessibilityInfo   String?
+  tags                String[]            @default([])
+  addOns              Json?
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  city                City                @relation(fields: [cityId], references: [id], onDelete: Cascade)
+  itineraryActivities ItineraryActivity[]
+  reviews             Review[]
+  savedBy             SavedActivity[]
+  priceAlerts         PriceAlert[]
+  @@index([cityId])
+  @@index([category])
+  @@index([rating])
+  @@map("activities")
+}
+
+model SavedActivity {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String   @db.Uuid
+  activityId    String   @db.Uuid
+  priceAlertSet Boolean  @default(false)
+  targetPrice   Float?
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activity      Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  @@unique([userId, activityId])
+  @@map("saved_activities")
+}
+
+model PriceAlert {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String    @db.Uuid
+  activityId   String    @db.Uuid
+  targetPrice  Float
+  currentPrice Float
+  triggered    Boolean   @default(false)
+  triggeredAt  DateTime?
+  createdAt    DateTime  @default(now())
+  activity     Activity  @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("price_alerts")
+}
+
+// ─── BUDGET & EXPENSES ────────────────────────────────────────────────────────
+
+model Expense {
+  id           String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId       String          @db.Uuid
+  userId       String          @db.Uuid
+  category     ExpenseCategory
+  amount       Float
+  currency     String          @default("USD")
+  amountUsd    Float?
+  description  String
+  date         DateTime
+  location     String?
+  receiptUrl   String?
+  ocrData      Json?
+  isShared     Boolean         @default(false)
+  splitWith    String[]        @default([]) @db.Uuid
+  splitAmounts Json?
+  notes        String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  trip         Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([tripId])
+  @@index([userId])
+  @@index([date])
+  @@map("expenses")
+}
+
+model BudgetCategory {
+  id          String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId      String          @db.Uuid
+  category    ExpenseCategory
+  budgetLimit Float
+  alertAt     Float           @default(80)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  trip        Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  @@unique([tripId, category])
+  @@map("budget_categories")
+}
+
+// ─── PACKING ──────────────────────────────────────────────────────────────────
+
+model PackingList {
+  id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId    String        @db.Uuid
+  userId    String        @db.Uuid
+  name      String        @default("Main Packing List")
+  isShared  Boolean       @default(false)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  trip      Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     PackingItem[]
+  @@index([tripId])
+  @@map("packing_lists")
+}
+
+model PackingItem {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  listId        String      @db.Uuid
+  name          String
+  category      String
+  quantity      Int         @default(1)
+  isPacked      Boolean     @default(false)
+  isEssential   Boolean     @default(false)
+  estimatedCost Float?
+  notes         String?
+  addedBy       String?     @db.Uuid
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  list          PackingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  @@index([listId])
+  @@map("packing_items")
+}
+
+// ─── NOTES / JOURNAL ──────────────────────────────────────────────────────────
+
+model Note {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId      String      @db.Uuid
+  userId      String      @db.Uuid
+  title       String?
+  content     String      @db.Text
+  category    NoteCategory @default(GENERAL)
+  privacy     NotePrivacy  @default(PRIVATE)
+  mood        MoodType?
+  energyLevel Int?
+  hashtags    String[]    @default([])
+  photos      String[]    @default([])
+  voiceUrl    String?
+  latitude    Float?
+  longitude   Float?
+  locationName String?
+  date        DateTime    @default(now())
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  trip        Trip        @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+@@index([tripId])
+  @@index([userId])
+  @@map("notes")
+}
+
+// ─── REVIEWS ──────────────────────────────────────────────────────────────────
+
+model Review {
+  id           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String             @db.Uuid
+  activityId   String?            @db.Uuid
+  rating       Int
+  title        String?
+  content      String             @db.Text
+  photos       String[]           @default([])
+  helpfulCount Int                @default(0)
+  status       ModerationStatus   @default(PENDING)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activity     Activity?          @relation(fields: [activityId], references: [id])
+  @@index([userId])
+  @@index([activityId])
+  @@map("reviews")
+}
+
+// ─── PUBLIC ITINERARIES ───────────────────────────────────────────────────────
+
+model PublicItinerary {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId      String   @unique @db.Uuid
+  userId      String   @db.Uuid
+  slug        String   @unique
+  title       String
+  description String?  @db.Text
+  coverUrl    String?
+  viewCount   Int      @default(0)
+  copyCount   Int      @default(0)
+  rating      Float    @default(0)
+  ratingCount Int      @default(0)
+  isFeatured  Boolean  @default(false)
+  isVerified  Boolean  @default(false)
+  qrCode      String?
+  embedCode   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  trip        Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([slug])
+  @@index([isFeatured])
+  @@map("public_itineraries")
+}
+
+// ─── COMMUNITY ────────────────────────────────────────────────────────────────
+
+model CommunityPost {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String       @db.Uuid
+  title       String?
+  content     String       @db.Text
+  images      String[]     @default([])
+  tags        String[]     @default([])
+  likeCount   Int          @default(0)
+  commentCount Int         @default(0)
+  shareCount  Int          @default(0)
+  status      ModerationStatus @default(PENDING)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments    PostComment[]
+  likes       PostLike[]
+  @@index([userId])
+  @@map("community_posts")
+}
+
+model PostComment {
+  id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId    String        @db.Uuid
+  userId    String        @db.Uuid
+  content   String        @db.Text
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([postId])
+  @@map("post_comments")
+}
+
+model PostLike {
+  id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId    String        @db.Uuid
+  userId    String        @db.Uuid
+  createdAt DateTime      @default(now())
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([postId, userId])
+  @@map("post_likes")
+}
+
+// ─── MESSAGING ────────────────────────────────────────────────────────────────
+
+model Message {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  senderId   String   @db.Uuid
+  receiverId String   @db.Uuid
+  content    String   @db.Text
+  isRead     Boolean  @default(false)
+  readAt     DateTime?
+  createdAt  DateTime @default(now())
+  sender     User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver   User     @relation("MessageReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  @@index([senderId])
+  @@index([receiverId])
+  @@map("messages")
+}
+
+// ─── TRAVEL BUDDIES ───────────────────────────────────────────────────────────
+
+model TravelBuddy {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  initiatorId String      @db.Uuid
+  receiverId  String      @db.Uuid
+  status      BuddyStatus @default(PENDING)
+  message     String?
+  tripId      String?     @db.Uuid
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  initiator   User        @relation("BuddyInitiator", fields: [initiatorId], references: [id], onDelete: Cascade)
+  receiver    User        @relation("BuddyReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  @@unique([initiatorId, receiverId])
+  @@map("travel_buddies")
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String           @db.Uuid
+  type      NotificationType
+  title     String
+  body      String
+  data      Json?
+  isRead    Boolean          @default(false)
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+// ─── ACHIEVEMENTS ─────────────────────────────────────────────────────────────
+
+model Achievement {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String            @unique
+  description String
+  iconUrl     String?
+  category    String
+  points      Int               @default(0)
+  criteria    Json
+  createdAt   DateTime          @default(now())
+  userAchievements UserAchievement[]
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String      @db.Uuid
+  achievementId String      @db.Uuid
+  earnedAt      DateTime    @default(now())
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+  @@unique([userId, achievementId])
+  @@map("user_achievements")
+}
+
+// ─── MINDFUL EXPLORER ─────────────────────────────────────────────────────────
+
+model MindfulPoint {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @db.Uuid
+  tripId      String?  @db.Uuid
+  points      Int
+  reason      String
+  phoneLocked Boolean  @default(false)
+  duration    Int?     // minutes phone was locked
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("mindful_points")
+}
+
+// ─── CARBON TRACKING ──────────────────────────────────────────────────────────
+
+model CarbonTracking {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId        String        @db.Uuid
+  transportMode TransportMode
+  distance      Float
+  co2Kg         Float
+  fromCity      String?
+  toCity        String?
+  date          DateTime
+  createdAt     DateTime      @default(now())
+  trip          Trip          @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  @@index([tripId])
+  @@map("carbon_tracking")
+}
+
+model CarbonOffset {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @db.Uuid
+  programName String
+  co2Kg       Float
+  cost        Float
+  currency    String   @default("USD")
+  receiptUrl  String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("carbon_offsets")
+}
+
+// ─── LIVE TRACKING ────────────────────────────────────────────────────────────
+
+model LiveTracking {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId          String   @unique @db.Uuid
+  isActive        Boolean  @default(false)
+  currentLatitude Float?
+  currentLongitude Float?
+  currentActivity String?
+  lastUpdated     DateTime @default(now())
+  createdAt       DateTime @default(now())
+  trip            Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  @@map("live_tracking")
+}
+
+// ─── DETOUR ROULETTE ──────────────────────────────────────────────────────────
+
+model DetourHistory {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId       String   @db.Uuid
+  activityId   String?  @db.Uuid
+  activityName String
+  accepted     Boolean  @default(false)
+  budget       Float?
+  createdAt    DateTime @default(now())
+  trip         Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  @@index([tripId])
+  @@map("detour_history")
+}
+
+// ─── ROAD MAP ─────────────────────────────────────────────────────────────────
+
+model RoadmapMeta {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tripId       String   @unique @db.Uuid
+  totalStops   Int      @default(0)
+  totalGems    Int      @default(0)
+  totalDistance Float   @default(0)
+  svgPath      String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  trip         Trip     @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  @@map("roadmap_meta")
+}
+
+// ─── SAFETY ALERTS ────────────────────────────────────────────────────────────
+
+model SafetyAlert {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cityId      String?       @db.Uuid
+  countryCode String?       @db.Char(2)
+  title       String
+  description String        @db.Text
+  severity    AlertSeverity
+  category    String        // scam, theft, health, political, natural_disaster
+  source      String?
+  isActive    Boolean       @default(true)
+  expiresAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  @@index([cityId])
+  @@index([countryCode])
+  @@index([severity])
+  @@map("safety_alerts")
+}
+
+model ScamReport {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cityId      String?  @db.Uuid
+  title       String
+  description String   @db.Text
+  scamType    String
+  reportCount Int      @default(1)
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([cityId])
+  @@map("scam_reports")
+}
+
+model VerifiedVendor {
+  id           String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name         String
+  website      String?
+  category     String
+  cityId       String?            @db.Uuid
+  status       VerificationStatus @default(PENDING)
+  verifiedAt   DateTime?
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  @@map("verified_vendors")
+}
+
+// ─── ANALYTICS ────────────────────────────────────────────────────────────────
+
+model AnalyticsEvent {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String?  @db.Uuid
+  event      String
+  properties Json?
+  sessionId  String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([userId])
+  @@index([event])
+  @@index([createdAt])
+  @@map("analytics_events")
+}
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String?  @db.Uuid
+  action     String
+  resource   String
+  resourceId String?
+  oldData    Json?
+  newData    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  @@index([userId])
+  @@index([resource])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model ModerationAction {
+  id         String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  moderatorId String          @db.Uuid
+  resource   String
+  resourceId String
+  action     String
+  reason     String?
+  status     ModerationStatus @default(PENDING)
+  createdAt  DateTime         @default(now())
+  moderator  User             @relation(fields: [moderatorId], references: [id])
+  @@index([moderatorId])
+  @@index([resource])
+  @@map("moderation_actions")
+}
