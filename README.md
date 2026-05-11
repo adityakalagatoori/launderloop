@@ -1,4 +1,4 @@
-# 🌍 TravelLoop — Plan. Explore. Loop.
+# 🌍 launderLoop — Plan. Explore. Loop.
 
 > **The ultimate full-stack travel planning platform** — built with React, NestJS, PostgreSQL, and Prisma. From itinerary building to carbon tracking, TravelLoop covers every aspect of modern travel.
 
